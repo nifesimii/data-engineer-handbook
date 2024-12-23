@@ -28,6 +28,10 @@ WITH streak_started AS (
          FROM streak_identified
          GROUP BY 1,2,3
      )
-
      SELECT player_name, scoring_class, start_date, end_date
      FROM aggregated
+     
+     
+select * from players
+
+SELECT * FROM player_seasons
