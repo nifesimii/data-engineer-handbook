@@ -7,3 +7,4 @@ CREATE TABLE actor_films (
     Rating REAL,
     FilmID text,
     PRIMARY KEY(ActorId, FilmId)
+)
