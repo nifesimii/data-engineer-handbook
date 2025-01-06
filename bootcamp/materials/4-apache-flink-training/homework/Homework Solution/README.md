@@ -126,9 +126,81 @@ cd bootcamp/materials/4-apache-flink-training
     739
     (1 row)
     ```
-    
 
-5. When you're done, you can stop and/or clean up the Docker resources by running the commands below.
+## Assignment Solution
+5.  Assuming you have run the commands above, the flink cluster and  and postgress databases should be running  so next we run the make command for pyflink code
+
+    ```bash
+    make session_job:
+
+    #// if you dont have make, you can run:
+    # docker compose exec jobmanager ./bin/flink run -py /opt/src/job/session_job.py --pyFiles /opt/src -d
+    ```
+
+    After about a minute, you should see a prompt that the job's been submitted (e.g., `Job has been submitted with JobID <job_id_number>`). Now go back to the [Flink UI](http://localhost:8081/#/job/running) to see the job running! :tada:
+
+    Next we create the session table ddl in postgresql  with the command belows 
+
+    ```bash
+    psql (15.3 (Debian 15.3-1.pgdg110+1))
+    Type "help" for help.
+
+    postgres=# CREATE TABLE session_events(
+        session_start TIMESTAMP(3),
+        session_end TIMESTAMP(3),  
+        ip VARCHAR,       
+        host VARCHAR,
+        num_events BIGINT
+        );
+    ---------
+    CREATE TABLE
+    Query returned successfully in 75 msec.
+    ```
+
+    Then we finaly run the script to get the avarage number of web event of a user based on the host said user is visiting 
+    ```bash
+        psql (15.3 (Debian 15.3-1.pgdg110+1))
+    Type "help" for help.
+
+    postgres=# select  ip as user_ip,host,CAST(AVG(num_events) AS BIGINT) AS Average_num_events from session_events
+    where host = 'www.dataexpert.io'  and ip = '74.96.167.138' GROUP BY ip , host
+    -------------------------------
+    user_ip host Average_num_events
+    -------------------------------
+    74.96.167.138  www.dataexpert.io    6 
+    (1 row)
+    ```
+
+    From the above query result, its clear the user with ip number `74.96.167.138` has visited www.dataexpert.io  6 times since the flink job started.  it should be noted that results can vary depending on the host and user ip used in the query as can be seen in the examples below based on the host name used in host parameter
+
+    ```
+    -----------------------------------------------
+    user_ip host Average_num_events
+    -----------------------------------------------
+    74.96.167.138  zachwilson.techcreator.io    3
+    (1 row)
+    ```
+
+    ```
+    -----------------------------------------------
+    user_ip host Average_num_events
+    -----------------------------------------------
+    74.96.167.138  zachwilson.tech    5
+    (1 row)
+    ```
+
+     ```
+    -----------------------------------------------
+    user_ip host Average_num_events
+    -----------------------------------------------
+    74.96.167.138  lulu.techcreator.io   9
+    (1 row)
+    ```
+
+    The results above show the output  the average session events for a specific IP address with the -different hosts - zachwilson.techcreator.io, zachwilson.tech, and lulu.techcreator.io
+
+
+6. When you're done, you can stop and/or clean up the Docker resources by running the commands below.
 
     ```bash
     make stop # to stop running services in docker compose
@@ -167,3 +239,45 @@ Targets:
   postgres-die-mac     Removes mounted postgres data dir on local machine (mac users) and in Docker
   postgres-die-pc      Removes mounted postgres data dir on local machine (PC users) and in Docker
 ```
+
+
+### Its important to note certain performance limitations can be encountered during the development of this job. Here are seven of such limitations and how to addrees them 
+
+Limiatation One:
+Backpressure Handling; High message throughput in Kafka can overwhelm the  PostgreSQL 
+Solution One :
+Instance Implement checkpointing and proper parallelism in the Flink job to avoid backpressure.
+Tune Kafka consumer settings (e.g., fetch size, poll interval) to balance performance and resource usage.
+Parallelism Configuration. Ensure the Kafka source and PostgreSQL sink have adequate parallelism to process data efficiently
+
+
+Limitation Two 
+Data Serialization: Misaligned types can cause deserialization or JDBC errors, slowing down the pipeline.
+Solution Two 
+Ensure data types between Kafka, Flink, and PostgreSQL are compatible.
+
+
+Limitation Three
+Late Events : Late events are events that arrive after the watermark has passed the end of the window
+Solution Three
+Properly configure watermarks in the Kafka source to handle late-arriving data while avoiding excessive memory consumption.
+
+Limitations Four
+Database Write Bottleneck: Use connection pooling libraries or increase PostgreSQL’s max_connections setting.
+Solution Four
+PostgreSQL may struggle with high-frequency inserts, leading to contention or connection pool exhaustion. 
+
+Limitation Five
+Fault Tolerance: If the Flink job fails, partial writes to PostgreSQL can occur.
+Solution Five
+Implement idempotent writes or a deduplication mechanism in PostgreSQL to avoid duplicate data.
+
+Limitation Six
+Schema Evolution : Changes in the Kafka message schema or PostgreSQL table schema can break the pipeline.
+Solution Six:
+Employ schema registry tools (e.g., Apache Avro or Confluent Schema Registry) to manage schema changes.
+
+Limitation Seven
+Data Skew : Uneven distribution of data (e.g., hotspot IPs) can lead to imbalanced processing across Flink operators.
+Solution Seven
+Implement partitioning strategies to reduce skew.
